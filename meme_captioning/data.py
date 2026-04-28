@@ -16,10 +16,10 @@ class MemeExample:
     image_path: Path
 
 
-def load_template_image_map(dataset_dir: str | Path) -> dict[str, Path]:
+def load_template_image_map(dataset_dir: str | Path, image_dir: str | Path | None = None) -> dict[str, Path]:
     """Map exact template names in templates.txt to local image paths."""
     dataset_dir = Path(dataset_dir)
-    image_dir = dataset_dir / "images"
+    image_dir = Path(image_dir) if image_dir else dataset_dir / "images"
     mapping: dict[str, Path] = {}
 
     with (dataset_dir / "templates.txt").open("r", encoding="utf-8") as f:
@@ -56,6 +56,7 @@ class MemeCaptionDataset(Dataset):
         dataset_dir: str | Path,
         split: str = "train",
         caption_separator: str = "\n",
+        image_dir: str | Path | None = None,
     ) -> None:
         self.dataset_dir = Path(dataset_dir)
         self.caption_separator = caption_separator
@@ -63,7 +64,7 @@ class MemeCaptionDataset(Dataset):
         if split == "all":
             captions_path = self.dataset_dir / "captions.txt"
 
-        template_to_image = load_template_image_map(self.dataset_dir)
+        template_to_image = load_template_image_map(self.dataset_dir, image_dir=image_dir)
         examples: list[MemeExample] = []
         missing_templates: set[str] = set()
         missing_images: set[Path] = set()
@@ -110,4 +111,3 @@ class MemeCaptionDataset(Dataset):
             "template": example.template,
             "score": example.score,
         }
-

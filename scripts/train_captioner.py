@@ -19,6 +19,7 @@ from meme_captioning.model import VisionPrefixCausalLM
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-dir", default="memes900k")
+    parser.add_argument("--image-dir", default=None)
     parser.add_argument("--vision-model", default="google/vit-base-patch16-224")
     parser.add_argument("--language-model", default="gpt2")
     parser.add_argument("--output-dir", default="checkpoints/meme-captioner")
@@ -54,8 +55,14 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    train_dataset = maybe_limit(MemeCaptionDataset(args.dataset_dir, split="train"), args.limit_train)
-    val_dataset = maybe_limit(MemeCaptionDataset(args.dataset_dir, split="val"), args.limit_val)
+    train_dataset = maybe_limit(
+        MemeCaptionDataset(args.dataset_dir, split="train", image_dir=args.image_dir),
+        args.limit_train,
+    )
+    val_dataset = maybe_limit(
+        MemeCaptionDataset(args.dataset_dir, split="val", image_dir=args.image_dir),
+        args.limit_val,
+    )
     collator = MemeCaptionCollator(image_processor, tokenizer, max_length=args.max_length)
 
     train_loader = DataLoader(
