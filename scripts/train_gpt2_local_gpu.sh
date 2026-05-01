@@ -4,19 +4,19 @@ set -euo pipefail
 
 mkdir -p checkpoints models
 
-python3 -m pip install -r requirements.txt
+python3 -m pip install -r ../requirements.txt
 
-python3 scripts/download_vit.py \
+python3 download_vit.py \
   --model-name google/vit-base-patch16-224 \
   --local-dir models/vit-base-patch16-224
 
-python3 scripts/resize_images.py \
+python3 resize_images.py \
   --input-dir memes900k/images \
   --output-dir memes900k/images_224 \
   --size 224 \
   --mode resize
 
-python3 scripts/train_captioner.py \
+python3 train_captioner.py \
   --dataset-dir memes900k \
   --image-dir memes900k/images_224 \
   --vision-model models/vit-base-patch16-224 \
