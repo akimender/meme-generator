@@ -7,7 +7,7 @@ cd "$REPO_ROOT"
 
 mkdir -p checkpoints models
 
-BATCH_SIZE="${BATCH_SIZE:-32}"
+BATCH_SIZE="${BATCH_SIZE:-128}"
 NUM_WORKERS="${NUM_WORKERS:-2}"
 EPOCHS="${EPOCHS:-1}"
 
