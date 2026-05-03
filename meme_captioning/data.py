@@ -2,10 +2,49 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Iterable
 
 from PIL import Image
 from torch.utils.data import Dataset
+
+CAPTION_START = "<caption>"
+CAPTION_SEP = "<sep>"
+CAPTION_END = "<end>"
+SPECIAL_TOKENS = [CAPTION_START, CAPTION_SEP, CAPTION_END]
+
+BLOCKED_PATTERNS = [
+    r"\bf+u+c+k+\w*\b",
+    r"\bs+h+i+t+\w*\b",
+    r"\bb+i+t+c+h+\w*\b",
+    r"\ba+s+s+h*o*l*e*\b",
+    r"\bd+i+c+k+\w*\b",
+    r"\bc+o+c+k+\w*\b",
+    r"\bp+u+s+s+y+\w*\b",
+    r"\bc+u+m+\w*\b",
+    r"\bwhore\w*\b",
+    r"\bslut\w*\b",
+    r"\bporn\w*\b",
+    r"\brape\w*\b",
+    r"\bhand\s*job\w*\b",
+    r"\bblow\s*job\w*\b",
+    r"\bboob\w*\b",
+    r"\btit+s*\b",
+    r"\bpenis\w*\b",
+    r"\bvagina\w*\b",
+    r"\bfag+\w*\b",
+    r"\bgay\b",
+    r"\bretard\w*\b",
+    r"\bn+i+g+g+\w*\b",
+    r"\bnazi\w*\b",
+    r"\bhitler\w*\b",
+    r"\bholocaust\b",
+    r"\bjew\w*\b",
+    r"\bkkk\b",
+    r"\bkill\s+yourself\b",
+]
+
+BLOCKED_RE = re.compile("|".join(BLOCKED_PATTERNS), re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -57,9 +96,14 @@ class MemeCaptionDataset(Dataset):
         split: str = "train",
         caption_separator: str = "\n",
         image_dir: str | Path | None = None,
+        min_score: int | None = None,
+        filter_unsafe: bool = False,
+        require_two_parts: bool = False,
+        formatted_caption: bool = False,
     ) -> None:
         self.dataset_dir = Path(dataset_dir)
         self.caption_separator = caption_separator
+        self.formatted_caption = formatted_caption
         captions_path = self.dataset_dir / f"captions_{split}.txt"
         if split == "all":
             captions_path = self.dataset_dir / "captions.txt"
@@ -70,6 +114,13 @@ class MemeCaptionDataset(Dataset):
         missing_images: set[Path] = set()
 
         for template, score, caption in iter_caption_rows(captions_path):
+            if min_score is not None and score < min_score:
+                continue
+            if filter_unsafe and is_unsafe_caption(caption):
+                continue
+            if require_two_parts and not has_two_nonempty_parts(caption):
+                continue
+
             image_path = template_to_image.get(template)
             if image_path is None:
                 missing_templates.add(template)
@@ -96,7 +147,11 @@ class MemeCaptionDataset(Dataset):
         self.examples = examples
 
     def normalize_caption(self, caption: str) -> str:
-        return caption.replace(" <sep> ", self.caption_separator).replace("<emp>", "").strip()
+        parts = normalize_caption_parts(caption)
+        if self.formatted_caption:
+            top, bottom = (parts + [""])[:2]
+            return f"{CAPTION_START} {top} {CAPTION_SEP} {bottom} {CAPTION_END}"
+        return self.caption_separator.join(parts).strip()
 
     def __len__(self) -> int:
         return len(self.examples)
@@ -111,3 +166,22 @@ class MemeCaptionDataset(Dataset):
             "template": example.template,
             "score": example.score,
         }
+
+
+def normalize_caption_parts(caption: str) -> list[str]:
+    parts = caption.split(" <sep> ")
+    normalized = []
+    for part in parts:
+        part = part.replace("<emp>", "")
+        part = re.sub(r"\s+", " ", part).strip()
+        if part:
+            normalized.append(part)
+    return normalized
+
+
+def has_two_nonempty_parts(caption: str) -> bool:
+    return len(normalize_caption_parts(caption)) >= 2
+
+
+def is_unsafe_caption(caption: str) -> bool:
+    return BLOCKED_RE.search(caption) is not None

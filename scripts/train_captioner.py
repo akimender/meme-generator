@@ -12,7 +12,7 @@ from transformers import AutoTokenizer, ViTImageProcessor, get_linear_schedule_w
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from meme_captioning.collator import MemeCaptionCollator
-from meme_captioning.data import MemeCaptionDataset
+from meme_captioning.data import SPECIAL_TOKENS, MemeCaptionDataset
 from meme_captioning.model import VisionPrefixCausalLM
 
 
@@ -33,6 +33,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--limit-train", type=int, default=0)
     parser.add_argument("--limit-val", type=int, default=0)
+    parser.add_argument("--min-score", type=int, default=None)
+    parser.add_argument("--filter-unsafe", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--require-two-parts", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--formatted-caption", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--freeze-vision", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--freeze-language-model", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -54,15 +58,34 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.language_model, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    if args.formatted_caption:
+        tokenizer.add_special_tokens({"additional_special_tokens": SPECIAL_TOKENS})
 
     train_dataset = maybe_limit(
-        MemeCaptionDataset(args.dataset_dir, split="train", image_dir=args.image_dir),
+        MemeCaptionDataset(
+            args.dataset_dir,
+            split="train",
+            image_dir=args.image_dir,
+            min_score=args.min_score,
+            filter_unsafe=args.filter_unsafe,
+            require_two_parts=args.require_two_parts,
+            formatted_caption=args.formatted_caption,
+        ),
         args.limit_train,
     )
     val_dataset = maybe_limit(
-        MemeCaptionDataset(args.dataset_dir, split="val", image_dir=args.image_dir),
+        MemeCaptionDataset(
+            args.dataset_dir,
+            split="val",
+            image_dir=args.image_dir,
+            min_score=args.min_score,
+            filter_unsafe=args.filter_unsafe,
+            require_two_parts=args.require_two_parts,
+            formatted_caption=args.formatted_caption,
+        ),
         args.limit_val,
     )
+    print(f"train_examples={len(train_dataset)} val_examples={len(val_dataset)}")
     collator = MemeCaptionCollator(image_processor, tokenizer, max_length=args.max_length)
 
     train_loader = DataLoader(
@@ -88,7 +111,9 @@ def main() -> None:
         visual_prefix_length=args.visual_prefix_length,
         freeze_vision=args.freeze_vision,
         freeze_language_model=args.freeze_language_model,
-    ).to(args.device)
+    )
+    model.language_model.resize_token_embeddings(len(tokenizer))
+    model.to(args.device)
 
     optimizer = torch.optim.AdamW(
         (param for param in model.parameters() if param.requires_grad),

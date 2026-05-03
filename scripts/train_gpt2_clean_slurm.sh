@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=meme-vit-gpt2
+#SBATCH --job-name=meme-gpt2-clean
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:l40s:1
 #SBATCH --cpus-per-task=8
@@ -11,16 +11,18 @@
 set -euo pipefail
 
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
-mkdir -p logs checkpoints
+mkdir -p logs checkpoints models
 
 export HF_HOME="${HF_HOME:-/scratch/$USER/hf-cache}"
 export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/transformers}"
+export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
 export TOKENIZERS_PARALLELISM=false
 
 BATCH_SIZE="${BATCH_SIZE:-32}"
-EPOCHS="${EPOCHS:-1}"
+EPOCHS="${EPOCHS:-2}"
 NUM_WORKERS="${NUM_WORKERS:-8}"
 LR="${LR:-5e-5}"
+MIN_SCORE="${MIN_SCORE:-1}"
 
 python3 -m pip install -r requirements.txt
 
@@ -40,7 +42,7 @@ python3 scripts/train_captioner.py \
   --image-dir memes900k/images_224 \
   --vision-model models/vit-base-patch16-224 \
   --language-model gpt2 \
-  --output-dir checkpoints/vit-gpt2 \
+  --output-dir checkpoints/vit-gpt2-clean \
   --batch-size "$BATCH_SIZE" \
   --epochs "$EPOCHS" \
   --lr "$LR" \
@@ -48,5 +50,9 @@ python3 scripts/train_captioner.py \
   --max-length 64 \
   --visual-prefix-length 8 \
   --num-workers "$NUM_WORKERS" \
+  --min-score "$MIN_SCORE" \
+  --filter-unsafe \
+  --require-two-parts \
+  --formatted-caption \
   --freeze-vision \
   --no-freeze-language-model

@@ -10,6 +10,7 @@ from transformers import AutoTokenizer, ViTImageProcessor
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from meme_captioning.data import CAPTION_END, CAPTION_SEP, CAPTION_START
 from meme_captioning.model import VisionPrefixCausalLM
 
 
@@ -17,11 +18,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", default="checkpoints/vit-gpt2-local-gpu/best.pt")
     parser.add_argument("--image", required=True)
-    parser.add_argument("--prompt", default="")
+    parser.add_argument("--prompt", default=CAPTION_START)
     parser.add_argument("--num-captions", type=int, default=5)
-    parser.add_argument("--max-new-tokens", type=int, default=32)
-    parser.add_argument("--temperature", type=float, default=0.9)
-    parser.add_argument("--top-p", type=float, default=0.95)
+    parser.add_argument("--max-new-tokens", type=int, default=24)
+    parser.add_argument("--temperature", type=float, default=0.7)
+    parser.add_argument("--top-p", type=float, default=0.9)
+    parser.add_argument("--repetition-penalty", type=float, default=1.2)
+    parser.add_argument("--no-repeat-ngram-size", type=int, default=3)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     return parser.parse_args()
 
@@ -43,6 +46,7 @@ def main() -> None:
         freeze_vision=True,
         freeze_language_model=False,
     )
+    model.language_model.resize_token_embeddings(len(tokenizer))
     model.load_state_dict(checkpoint["model"])
     model.to(args.device)
     model.eval()
@@ -60,9 +64,23 @@ def main() -> None:
             do_sample=True,
             temperature=args.temperature,
             top_p=args.top_p,
+            repetition_penalty=args.repetition_penalty,
+            no_repeat_ngram_size=args.no_repeat_ngram_size,
+            eos_token_id=tokenizer.convert_tokens_to_ids(CAPTION_END),
         )
-        text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-        print(f"{idx + 1}. {text.strip()}")
+        text = tokenizer.decode(output_ids[0], skip_special_tokens=False)
+        print(f"{idx + 1}. {clean_generated_caption(text)}")
+
+
+def clean_generated_caption(text: str) -> str:
+    if CAPTION_START in text:
+        text = text.split(CAPTION_START, maxsplit=1)[-1]
+    if CAPTION_END in text:
+        text = text.split(CAPTION_END, maxsplit=1)[0]
+    text = text.replace(CAPTION_SEP, "\n")
+    for token in (CAPTION_START, CAPTION_END):
+        text = text.replace(token, "")
+    return "\n   ".join(line.strip() for line in text.splitlines() if line.strip())
 
 
 if __name__ == "__main__":
