@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    checkpoint = torch.load(args.checkpoint, map_location=args.device)
+    checkpoint = torch.load(args.checkpoint, map_location=args.device, weights_only=False)
     train_args = checkpoint["args"]
 
     tokenizer = AutoTokenizer.from_pretrained(Path(args.checkpoint).parent / "tokenizer")
